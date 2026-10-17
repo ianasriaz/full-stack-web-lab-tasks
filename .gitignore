@@ -1,0 +1,23 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+
+# Local databases created by EF Core / SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local agent/tooling state
+.commandcode/

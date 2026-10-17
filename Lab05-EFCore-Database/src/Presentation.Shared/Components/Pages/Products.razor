@@ -1,0 +1,233 @@
+@page "/products"
+@inject IProductApiClient Api
+
+<PageTitle>Products</PageTitle>
+
+<h1>Product catalog</h1>
+<p class="text-muted">
+    Products are loaded from the API, which persists data in SQLite using Entity Framework Core.
+</p>
+
+<div class="card p-3 mb-3">
+    <h2 class="h5">@(editingId is null ? "Add a product" : $"Edit product #{editingId}")</h2>
+
+    <div class="mb-2">
+        <label class="form-label" for="product-name">Name</label>
+        <input id="product-name" class="form-control" @bind="name" />
+    </div>
+
+    <div class="mb-2">
+        <label class="form-label" for="product-description">Description</label>
+        <input id="product-description" class="form-control" @bind="description" />
+    </div>
+
+    <div class="row">
+        <div class="col mb-2">
+            <label class="form-label" for="product-price">Price</label>
+            <input id="product-price" class="form-control" type="number" step="0.01" @bind="price" />
+        </div>
+        <div class="col mb-2">
+            <label class="form-label" for="product-stock">Stock</label>
+            <input id="product-stock" class="form-control" type="number" @bind="stock" />
+        </div>
+        <div class="col mb-2">
+            <label class="form-label" for="product-category">Category</label>
+            <select id="product-category" class="form-select" @bind="categoryId">
+                @foreach (var category in categories)
+                {
+                    <option value="@category.Id">@category.Name</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <div>
+        <button class="btn btn-primary" disabled="@busy" @onclick="SaveAsync">
+            @(editingId is null ? "Create" : "Update")
+        </button>
+        <button class="btn btn-secondary" disabled="@busy" @onclick="ResetForm">Clear</button>
+    </div>
+</div>
+
+@if (error is not null)
+{
+    <div class="alert alert-danger" role="alert">@error</div>
+}
+
+@if (message is not null)
+{
+    <div class="alert alert-success" role="status">@message</div>
+}
+
+@if (isLoading)
+{
+    <p role="status">Loading products from the API...</p>
+}
+else if (products.Count == 0)
+{
+    <p>No products were found.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Name</th>
+                <th>Category</th>
+                <th>Price</th>
+                <th>Stock</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var product in products)
+            {
+                <tr>
+                    <td>@product.Id</td>
+                    <td>@product.Name</td>
+                    <td>@product.CategoryName</td>
+                    <td>@product.Price.ToString("C")</td>
+                    <td>@product.Stock</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => Edit(product)">Edit</button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(product.Id)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<ProductDto> products = new();
+    private List<CategoryDto> categories = new();
+    private bool isLoading = true;
+    private bool busy;
+    private string? error;
+    private string? message;
+    private int? editingId;
+    private string name = string.Empty;
+    private string description = string.Empty;
+    private decimal price;
+    private int stock;
+    private int categoryId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        isLoading = true;
+        error = null;
+
+        try
+        {
+            categories = (await Api.GetCategoriesAsync()).ToList();
+            products = (await Api.GetProductsAsync()).ToList();
+
+            if (categoryId == 0 && categories.Count > 0)
+            {
+                categoryId = categories[0].Id;
+            }
+        }
+        catch (Exception exception)
+        {
+            error = "Could not reach the API: " + exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        busy = true;
+        error = null;
+        message = null;
+
+        try
+        {
+            if (editingId is int id)
+            {
+                await Api.UpdateProductAsync(
+                    id, new UpdateProductRequest(name, description, price, stock, categoryId));
+                message = "Product updated.";
+            }
+            else
+            {
+                await Api.CreateProductAsync(
+                    new CreateProductRequest(name, description, price, stock, categoryId));
+                message = "Product created.";
+            }
+
+            ResetForm();
+            await ReloadAsync();
+        }
+        catch (Exception exception)
+        {
+            error = exception.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void Edit(ProductDto product)
+    {
+        editingId = product.Id;
+        name = product.Name;
+        description = product.Description;
+        price = product.Price;
+        stock = product.Stock;
+        categoryId = product.CategoryId;
+        message = null;
+        error = null;
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        busy = true;
+        error = null;
+        message = null;
+
+        try
+        {
+            await Api.DeleteProductAsync(id);
+
+            if (editingId == id)
+            {
+                ResetForm();
+            }
+
+            message = "Product deleted.";
+            await ReloadAsync();
+        }
+        catch (Exception exception)
+        {
+            error = exception.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void ResetForm()
+    {
+        editingId = null;
+        name = string.Empty;
+        description = string.Empty;
+        price = 0;
+        stock = 0;
+
+        if (categories.Count > 0)
+        {
+            categoryId = categories[0].Id;
+        }
+    }
+}
